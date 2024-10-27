@@ -12,7 +12,7 @@ pub fn render(stdout: &mut Stdout, last_frame: &Frame, curr_frame: &Frame, force
         stdout.queue(SetBackgroundColor(Color::Blue)).unwrap();
         stdout.queue(Clear(ClearType::All)).unwrap();
         stdout.queue(SetBackgroundColor(Color::Black)).unwrap();
-        stdout.queue(SetForegroundColor(Color::Black)).unwrap();
+        stdout.queue(SetForegroundColor(Color::White)).unwrap();
     }
 
     for (x, col) in curr_frame.iter().enumerate() {
