@@ -12,9 +12,10 @@ use invaders::{
 use rusty_audio::Audio;
 use std::{
     error::Error,
+    io,
     sync::mpsc::{self, Receiver},
-    time::Duration,
-    {io, thread},
+    thread,
+    time::{Duration, Instant},
 };
 
 fn render_screen(render_rx: Receiver<Frame>) {
@@ -48,8 +49,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Game Loop
     let mut player = Player::new();
+    let mut instant = Instant::now();
+
     'gameloop: loop {
         // Per-frame init
+        let delta = instant.elapsed();
+        instant = Instant::now();
         let mut curr_frame = new_frame();
 
         // Input
@@ -58,6 +63,11 @@ fn main() -> Result<(), Box<dyn Error>> {
                 match key_event.code {
                     KeyCode::Left | KeyCode::Char('a') => player.move_left(),
                     KeyCode::Right | KeyCode::Char('d') => player.move_right(),
+                    KeyCode::Char(' ') | KeyCode::Enter => {
+                        if player.shoot() {
+                            audio.play("pew");
+                        }
+                    }
                     KeyCode::Esc | KeyCode::Char('q') => {
                         audio.play("lose");
                         break 'gameloop;
@@ -66,6 +76,9 @@ fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
         }
+
+        // Updates
+        player.update(delta);
 
         // Draw & Render
         player.draw(&mut curr_frame);
