@@ -22,13 +22,25 @@ use invaders::{
     score::Score,
 };
 
-fn render_screen(render_rx: Receiver<Frame>) {
+fn render_screen(render_rx: Receiver<Frame>, last_size: &mut (u16, u16)) {
     let mut last_frame = frame::new_frame();
     let mut stdout = io::stdout();
 
-    render::render(&mut stdout, &last_frame, &last_frame, true);
+    render::render(
+        &mut stdout,
+        &mut last_frame,
+        &mut last_frame,
+        true,
+        last_size,
+    );
     while let Ok(curr_frame) = render_rx.recv() {
-        render::render(&mut stdout, &last_frame, &curr_frame, false);
+        render::render(
+            &mut stdout,
+            &mut last_frame,
+            &mut curr_frame,
+            false,
+            last_size,
+        );
         last_frame = curr_frame;
     }
 }
@@ -55,12 +67,12 @@ fn main() -> Result<(), Box<dyn Error>> {
 
     // Render loop in a separate thread
     let (render_tx, render_rx) = mpsc::channel();
+    let mut last_size = crossterm::terminal::size()?; // Track the initial terminal size
     let render_handle = thread::spawn(move || {
-        render_screen(render_rx);
+        render_screen(render_rx, &mut last_size);
     });
 
     // Game loop
-    let (mut term_width, mut term_height) = crossterm::terminal::size()?;
     let mut instant = Instant::now();
     let mut player = Player::new();
     let mut invaders = Invaders::new(); // Use `new()` without frame size; use populate later
@@ -75,10 +87,9 @@ fn main() -> Result<(), Box<dyn Error>> {
     'gameloop: loop {
         // Get terminal size and check if it has changed
         let (new_term_width, new_term_height) = crossterm::terminal::size()?;
-        if new_term_width != term_width || new_term_height != term_height {
+        if new_term_width != last_size.0 || new_term_height != last_size.1 {
             // Adjust frame dimensions if the terminal was resized
-            term_width = new_term_width;
-            term_height = new_term_height;
+            last_size = (new_term_width, new_term_height);
             curr_frame = new_frame();
             player.center(&curr_frame); // Center player dynamically after resize
             invaders.populate(&curr_frame); // Re-populate invaders dynamically based on the new frame
