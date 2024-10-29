@@ -1,27 +1,31 @@
 use crossterm::{
     cursor::{Hide, Show},
     event::{self, Event, KeyCode},
-    terminal::{EnterAlternateScreen, LeaveAlternateScreen},
-    {terminal, ExecutableCommand},
-};
-use invaders::{
-    frame::{self, new_frame, Drawable, Frame},
-    invaders::Invaders,
-    player::Player,
-    render,
+    terminal::{self, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
 };
 use rusty_audio::Audio;
 use std::{
     error::Error,
-    io,
     sync::mpsc::{self, Receiver},
-    thread,
     time::{Duration, Instant},
+    {io, thread},
+};
+
+use invaders::{
+    frame::{self, new_frame, Drawable, Frame},
+    invaders::Invaders,
+    level::Level,
+    menu::Menu,
+    player::Player,
+    render,
+    score::Score,
 };
 
 fn render_screen(render_rx: Receiver<Frame>) {
     let mut last_frame = frame::new_frame();
     let mut stdout = io::stdout();
+
     render::render(&mut stdout, &last_frame, &last_frame, true);
     while let Ok(curr_frame) = render_rx.recv() {
         render::render(&mut stdout, &last_frame, &curr_frame, false);
@@ -29,12 +33,25 @@ fn render_screen(render_rx: Receiver<Frame>) {
     }
 }
 
+fn reset_game(in_menu: &mut bool, player: &mut Player, invaders: &mut Invaders, frame: &Frame) {
+    *in_menu = true;
+    *player = Player::new(); // Player is reset
+    player.center(frame); // Center player dynamically
+    invaders.populate(frame); // Populate invaders based on the current frame
+}
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut audio = Audio::new();
-    for sound in &["explode", "lose", "move", "pew", "startup", "pew", "win"] {
-        audio.add(sound, format!("sounds/{}.wav", sound));
+    for item in &["explode", "lose", "move", "pew", "startup", "win"] {
+        audio.add(item, format!("sounds/{}.wav", item));
     }
     audio.play("startup");
+
+    // Terminal setup
+    let mut stdout = io::stdout();
+    terminal::enable_raw_mode()?;
+    stdout.execute(EnterAlternateScreen)?;
+    stdout.execute(Hide)?;
 
     // Render loop in a separate thread
     let (render_tx, render_rx) = mpsc::channel();
@@ -42,28 +59,67 @@ fn main() -> Result<(), Box<dyn Error>> {
         render_screen(render_rx);
     });
 
-    // Terminal
-    let mut stdout = io::stdout();
-    terminal::enable_raw_mode()?;
-    stdout.execute(EnterAlternateScreen)?;
-    stdout.execute(Hide)?;
-
-    // Game Loop
-    let mut player = Player::new();
+    // Game loop
+    let (mut term_width, mut term_height) = crossterm::terminal::size()?;
     let mut instant = Instant::now();
-    let mut invaders = Invaders::new();
+    let mut player = Player::new();
+    let mut invaders = Invaders::new(); // Use `new()` without frame size; use populate later
+    let mut score = Score::new();
+    let mut menu = Menu::new();
+    let mut in_menu = true;
+    let mut level = Level::new();
+    let mut curr_frame = new_frame(); // Initialize the frame
+    player.center(&curr_frame); // Center the player initially
+    invaders.populate(&curr_frame); // Populate invaders based on the frame
+
     'gameloop: loop {
+        // Get terminal size and check if it has changed
+        let (new_term_width, new_term_height) = crossterm::terminal::size()?;
+        if new_term_width != term_width || new_term_height != term_height {
+            // Adjust frame dimensions if the terminal was resized
+            term_width = new_term_width;
+            term_height = new_term_height;
+            curr_frame = new_frame();
+            player.center(&curr_frame); // Center player dynamically after resize
+            invaders.populate(&curr_frame); // Re-populate invaders dynamically based on the new frame
+        }
+
         // Per-frame init
         let delta = instant.elapsed();
         instant = Instant::now();
         let mut curr_frame = new_frame();
 
-        // Input
+        if in_menu {
+            // Input handlers for the menu
+            while event::poll(Duration::default())? {
+                if let Event::Key(key_event) = event::read()? {
+                    match key_event.code {
+                        KeyCode::Up => menu.change_option(true),
+                        KeyCode::Down => menu.change_option(false),
+                        KeyCode::Char(' ') | KeyCode::Enter => {
+                            if menu.selection == 0 {
+                                in_menu = false;
+                            } else {
+                                break 'gameloop;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            menu.draw(&mut curr_frame);
+
+            let _ = render_tx.send(curr_frame);
+            thread::sleep(Duration::from_millis(1));
+            continue;
+        }
+
+        // Input handlers for the game
         while event::poll(Duration::default())? {
             if let Event::Key(key_event) = event::read()? {
                 match key_event.code {
-                    KeyCode::Left | KeyCode::Char('a') => player.move_left(),
-                    KeyCode::Right | KeyCode::Char('d') => player.move_right(),
+                    KeyCode::Left => player.move_left(&curr_frame), // Adjust player position dynamically
+                    KeyCode::Right => player.move_right(&curr_frame), // Adjust player position dynamically
                     KeyCode::Char(' ') | KeyCode::Enter => {
                         if player.shoot() {
                             audio.play("pew");
@@ -71,7 +127,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     }
                     KeyCode::Esc | KeyCode::Char('q') => {
                         audio.play("lose");
-                        break 'gameloop;
+                        reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame);
                     }
                     _ => {}
                 }
@@ -80,29 +136,33 @@ fn main() -> Result<(), Box<dyn Error>> {
 
         // Updates
         player.update(delta);
-        if invaders.update(delta) {
+        if invaders.update(delta, &curr_frame) {
             audio.play("move");
         }
-        if player.detect_hits(&mut invaders) {
+        let hits: u16 = player.detect_hits(&mut invaders);
+        if hits > 0 {
             audio.play("explode");
+            score.add_points(hits);
         }
 
-        // Draw & Render
-        let drawables: Vec<&dyn Drawable> = vec![&player, &invaders];
+        // Draw & render
+        let drawables: Vec<&dyn Drawable> = vec![&player, &invaders, &score, &level];
         for drawable in drawables {
             drawable.draw(&mut curr_frame);
         }
-        let _ = render_tx.send(curr_frame);
+        let _ = render_tx.send(curr_frame.clone());
         thread::sleep(Duration::from_millis(1));
 
-        // Win/Lose
+        // Win or lose?
         if invaders.all_killed() {
-            audio.play("win");
-            break 'gameloop;
-        }
-        if invaders.reached_bottom() {
+            if level.increment_level() {
+                audio.play("win");
+                break 'gameloop;
+            }
+            invaders.next_level(&curr_frame); // Re-populate invaders after winning
+        } else if invaders.reached_bottom(&curr_frame) {
             audio.play("lose");
-            break 'gameloop;
+            reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame);
         }
     }
 
@@ -112,5 +172,6 @@ fn main() -> Result<(), Box<dyn Error>> {
     audio.wait();
     stdout.execute(Show)?;
     stdout.execute(LeaveAlternateScreen)?;
+    terminal::disable_raw_mode()?;
     Ok(())
 }

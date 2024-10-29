@@ -1,19 +1,13 @@
-use crate::{NUM_COLS, NUM_ROWS};
+use crate::{DEFAULT_COLS, DEFAULT_ROWS};
 
-pub type Frame = Vec<Vec<&'static str>>;
+pub type Frame = Vec<Vec<char>>;
 
+// Create a new frame with the given width and height
 pub fn new_frame() -> Frame {
-    let mut cols = Vec::with_capacity(NUM_COLS);
-    for _ in 0..NUM_COLS {
-        let mut col = Vec::with_capacity(NUM_ROWS);
-        for _ in 0..NUM_ROWS {
-            col.push(" ");
-        }
-        cols.push(col);
-    }
-    cols
+    vec![vec![' '; DEFAULT_ROWS]; DEFAULT_COLS]
 }
 
+// Trait for drawable objects. They should implement a draw function that modifies the frame.
 pub trait Drawable {
     fn draw(&self, frame: &mut Frame);
 }
