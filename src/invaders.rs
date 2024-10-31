@@ -17,6 +17,7 @@ pub struct Invaders {
     direction: i32,
     level: u16,             // Add level to track which level we're on
     invaders_popped: usize, // Track how many invaders have been made visible during pop animation
+    pub shots_fired: u32,
 }
 
 impl Invaders {
@@ -30,6 +31,7 @@ impl Invaders {
             direction: 1,
             level: 1, // Start at level 1
             invaders_popped: 0,
+            shots_fired: 0,
         }
     }
 
@@ -61,44 +63,39 @@ impl Invaders {
         self.army.clear();
         self.invaders_popped = 0;
 
-        // Determine number of rows based on the number of invaders
-        let num_rows = if num_invaders >= 8 {
-            4
-        } else if num_invaders >= 4 {
-            2
-        } else {
-            1
-        };
+        let x_spacing = 3; // Space between invaders horizontally
+        let y_spacing = 2; // Space between invaders vertically
 
-        let num_cols = (num_invaders + num_rows - 1) / num_rows; // Ceiling division
-
-        // Calculate spacing between invaders
-        let x_spacing = if num_cols > 1 {
-            (frame_width - 4) / (num_cols - 1)
-        } else {
-            (frame_width - 4) / 2
-        };
-        let y_spacing = 2;
-        let y_positions: Vec<usize> = (1..frame_height / 2)
-            .step_by(y_spacing)
-            .take(num_rows)
-            .collect();
+        // Calculate how many invaders can fit in one row based on frame width
+        let invaders_per_row = (frame_width - 4) / x_spacing;
 
         let mut invader_count = 0;
-        for col in 0..num_cols {
-            let x_position = 2 + col * x_spacing;
-            for &y in &y_positions {
+        for row in 0.. {
+            let y_position = 2 + row * y_spacing;
+
+            // Stop if we've reached beyond the available height in the frame
+            if y_position >= frame_height / 2 {
+                break;
+            }
+
+            for col in 0..invaders_per_row {
                 if invader_count >= num_invaders {
-                    break;
+                    break; // Stop if we have placed all invaders
                 }
+
+                let x_position = 2 + col * x_spacing;
+
                 self.army.push(Invader {
                     x: x_position,
-                    y,
+                    y: y_position,
                     points: 1,
                     is_visible: false,
                 });
+
                 invader_count += 1;
             }
+
+            // Break out of the loop once all invaders are placed
             if invader_count >= num_invaders {
                 break;
             }
@@ -124,7 +121,7 @@ impl Invaders {
         if self.move_timer.finished() {
             self.move_timer.reset();
             let mut downwards = false;
-            let frame_width = frame[0].len();
+            let frame_width = frame.len();
 
             if self.direction == -1 {
                 let min_x = self.army.iter().map(|invader| invader.x).min().unwrap_or(0);
@@ -134,16 +131,16 @@ impl Invaders {
                 }
             } else {
                 let max_x = self.army.iter().map(|invader| invader.x).max().unwrap_or(0);
-                if max_x == frame_width - 2 {
+                if max_x >= frame_width - 2 {
                     self.direction = -1;
                     downwards = true;
                 }
             }
 
             if downwards {
-                let new_duration = max(self.move_timer.duration().as_millis() - 250, 250);
+                let new_duration = self.calculate_speed();
                 self.move_timer
-                    .set_duration(Duration::from_millis(new_duration as u64));
+                    .set_duration(Duration::from_millis(new_duration));
                 for invader in self.army.iter_mut() {
                     invader.y += 1;
                 }
@@ -155,6 +152,22 @@ impl Invaders {
             return true;
         }
         false
+    }
+
+    // Calculate new speed based on level and shots fired (for levels > 10)
+    fn calculate_speed(&self) -> u64 {
+        if self.level > 10 {
+            let base_speed = max(1000 - (self.level as u64 * 50), 100); // Base speed decreases with level
+            let shots_speed_increase = self.shots_fired as u64 * 10; // Speed up with more shots fired
+            max(base_speed - shots_speed_increase, 100)
+        } else {
+            max(2000 - (self.level as u64 * 200), 500)
+        }
+    }
+
+    // Track shots fired by the player
+    pub fn record_shot(&mut self) {
+        self.shots_fired += 1;
     }
 
     // Check if all invaders are killed
@@ -188,6 +201,7 @@ impl Invaders {
     // Increment the level and repopulate invaders for the new level
     pub fn next_level(&mut self, frame: &Frame) {
         self.level += 1; // Move to the next level
+        self.shots_fired = 0;
         self.populate(frame); // Repopulate invaders based on the new level
     }
 }

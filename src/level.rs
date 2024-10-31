@@ -15,7 +15,7 @@ impl Level {
         if self.level <= MAX_LEVEL {
             self.level += 1;
         }
-        self.level == MAX_LEVEL
+        self.level > MAX_LEVEL
     }
 }
 
@@ -59,9 +59,10 @@ mod tests {
         let mut level = Level::new();
         // when
         level.increment_level();
+        level.increment_level();
         let actual = level.increment_level();
         // then
         assert_eq!(false, actual);
-        assert_eq!(3, level.level);
+        assert_eq!(4, level.level);
     }
 }

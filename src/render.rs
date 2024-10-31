@@ -9,8 +9,8 @@ use std::io::{Stdout, Write};
 
 pub fn render(
     stdout: &mut Stdout,
-    last_frame: &mut Frame,
-    curr_frame: &mut Frame,
+    last_frame: &Frame,
+    curr_frame: &Frame,
     force: bool,
     last_size: &mut (u16, u16), // Track the last terminal size
 ) {
@@ -19,14 +19,10 @@ pub fn render(
 
     // Check if the terminal has been resized
     let resized = (term_width, term_height) != *last_size;
-    if resized {
+    if resized || force {
         *last_size = (term_width, term_height); // Update the last known terminal size
-
-        // Resize the frame to match the new terminal dimensions
-        *curr_frame = new_frame(term_width as usize - 2, term_height as usize - 2); // Account for the borders
-        *last_frame = new_frame(term_width as usize - 2, term_height as usize - 2);
-
-        stdout.queue(Clear(ClearType::All)).unwrap(); // Clear screen on resize
+        stdout.queue(SetBackgroundColor(Color::Blue)).unwrap(); // Set background to blue
+        stdout.queue(Clear(ClearType::All)).unwrap(); // Clear screen with blue background
     }
 
     let frame_width = curr_frame.len() as u16;
@@ -35,14 +31,6 @@ pub fn render(
     // Calculate offsets to center the entire box, including the border
     let x_offset = (term_width.saturating_sub(frame_width + 2)) / 2; // +2 to account for the border
     let y_offset = (term_height.saturating_sub(frame_height + 2)) / 2; // +2 to account for the border
-
-    // Clear and set colors if forced or resized
-    if force || resized {
-        stdout.queue(SetBackgroundColor(Color::Blue)).unwrap();
-        stdout.queue(Clear(ClearType::All)).unwrap();
-        stdout.queue(SetBackgroundColor(Color::Black)).unwrap();
-        stdout.queue(SetForegroundColor(Color::White)).unwrap();
-    }
 
     // Draw white border around the game box
     stdout.queue(SetForegroundColor(Color::White)).unwrap();
@@ -88,24 +76,29 @@ pub fn render(
         .unwrap();
     print!("┘");
 
-    // Reset color back to default for game content
+    // Reset color back to default for game content (white text, black background)
+    stdout.queue(SetBackgroundColor(Color::Black)).unwrap();
     stdout.queue(SetForegroundColor(Color::White)).unwrap();
 
+    // Ensure the frame sizes match to avoid out-of-bounds access
+    let min_width = curr_frame.len().min(last_frame.len());
+    let min_height = curr_frame[0].len().min(last_frame[0].len());
+
+    // Ensure we're not rendering outside the terminal bounds
+    let renderable_width = (term_width.saturating_sub(2)).min(min_width as u16);
+    let renderable_height = (term_height.saturating_sub(2)).min(min_height as u16);
+
     // Iterate over each cell and render the game frame with offset
-    for (x, col) in curr_frame.iter().enumerate() {
-        for (y, s) in col.iter().enumerate() {
-            if *s != last_frame[x][y] || force || resized {
+    for x in 0..renderable_width as usize {
+        for y in 0..renderable_height as usize {
+            if curr_frame[x][y] != last_frame[x][y] || force || resized {
                 stdout
                     .queue(MoveTo(x as u16 + x_offset + 1, y as u16 + y_offset + 1)) // Offset by 1 for the border
                     .unwrap();
-                print!("{}", *s);
+                print!("{}", curr_frame[x][y]);
             }
         }
     }
 
     stdout.flush().unwrap();
-}
-
-pub fn new_frame(width: usize, height: usize) -> Frame {
-    vec![vec![' '; height]; width]
 }

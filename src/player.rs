@@ -24,7 +24,7 @@ impl Player {
     // Center the player based on the current frame size
     pub fn center(&mut self, frame: &Frame) {
         self.x = frame.len() / 2; // Center horizontally
-        self.y = frame[0].len() / 3 * 2; // Position near the bottom of the frame
+        self.y = frame[0].len() - 3; // Position near the bottom of the frame
     }
 
     // Move player left based on the current frame width

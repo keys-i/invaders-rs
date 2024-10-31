@@ -26,21 +26,9 @@ fn render_screen(render_rx: Receiver<Frame>, last_size: &mut (u16, u16)) {
     let mut last_frame = frame::new_frame();
     let mut stdout = io::stdout();
 
-    render::render(
-        &mut stdout,
-        &mut last_frame,
-        &mut last_frame,
-        true,
-        last_size,
-    );
+    render::render(&mut stdout, &last_frame, &last_frame, true, last_size);
     while let Ok(curr_frame) = render_rx.recv() {
-        render::render(
-            &mut stdout,
-            &mut last_frame,
-            &mut curr_frame,
-            false,
-            last_size,
-        );
+        render::render(&mut stdout, &last_frame, &curr_frame, false, last_size);
         last_frame = curr_frame;
     }
 }
@@ -52,26 +40,11 @@ fn reset_game(in_menu: &mut bool, player: &mut Player, invaders: &mut Invaders, 
     invaders.populate(frame); // Populate invaders based on the current frame
 }
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut audio = Audio::new();
-    for item in &["explode", "lose", "move", "pew", "startup", "win"] {
-        audio.add(item, format!("sounds/{}.wav", item));
-    }
-    audio.play("startup");
-
-    // Terminal setup
-    let mut stdout = io::stdout();
-    terminal::enable_raw_mode()?;
-    stdout.execute(EnterAlternateScreen)?;
-    stdout.execute(Hide)?;
-
-    // Render loop in a separate thread
-    let (render_tx, render_rx) = mpsc::channel();
-    let mut last_size = crossterm::terminal::size()?; // Track the initial terminal size
-    let render_handle = thread::spawn(move || {
-        render_screen(render_rx, &mut last_size);
-    });
-
+fn run_game(
+    audio: &mut Audio,
+    render_tx: &mpsc::Sender<Frame>,
+    last_size: &mut (u16, u16),
+) -> Result<(), Box<dyn Error>> {
     // Game loop
     let mut instant = Instant::now();
     let mut player = Player::new();
@@ -89,7 +62,6 @@ fn main() -> Result<(), Box<dyn Error>> {
         let (new_term_width, new_term_height) = crossterm::terminal::size()?;
         if new_term_width != last_size.0 || new_term_height != last_size.1 {
             // Adjust frame dimensions if the terminal was resized
-            last_size = (new_term_width, new_term_height);
             curr_frame = new_frame();
             player.center(&curr_frame); // Center player dynamically after resize
             invaders.populate(&curr_frame); // Re-populate invaders dynamically based on the new frame
@@ -134,6 +106,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                     KeyCode::Char(' ') | KeyCode::Enter => {
                         if player.shoot() {
                             audio.play("pew");
+                            invaders.record_shot();
                         }
                     }
                     KeyCode::Esc | KeyCode::Char('q') => {
@@ -176,6 +149,30 @@ fn main() -> Result<(), Box<dyn Error>> {
             reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame);
         }
     }
+    Ok(())
+}
+
+fn main() -> Result<(), Box<dyn Error>> {
+    let mut audio = Audio::new();
+    for item in &["explode", "lose", "move", "pew", "startup", "win"] {
+        audio.add(item, format!("sounds/{}.wav", item));
+    }
+    audio.play("startup");
+
+    // Terminal setup
+    let mut stdout = io::stdout();
+    terminal::enable_raw_mode()?;
+    stdout.execute(EnterAlternateScreen)?;
+    stdout.execute(Hide)?;
+
+    // Render loop in a separate thread
+    let (render_tx, render_rx) = mpsc::channel();
+    let mut last_size = crossterm::terminal::size()?; // Track the initial terminal size
+    let render_handle = thread::spawn(move || {
+        render_screen(render_rx, &mut last_size);
+    });
+
+    let res = run_game(&mut audio, &render_tx, &mut last_size);
 
     // Cleanup
     drop(render_tx);
@@ -184,5 +181,15 @@ fn main() -> Result<(), Box<dyn Error>> {
     stdout.execute(Show)?;
     stdout.execute(LeaveAlternateScreen)?;
     terminal::disable_raw_mode()?;
-    Ok(())
+
+    if let Err(e) = res {
+        stdout.execute(crossterm::style::SetForegroundColor(
+            crossterm::style::Color::Red,
+        ))?;
+        eprintln!("Error: {}", e);
+        stdout.execute(crossterm::style::ResetColor)?;
+        Err(e)
+    } else {
+        Ok(())
+    }
 }
