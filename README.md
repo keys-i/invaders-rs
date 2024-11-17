@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-# invaders-rs
-Space invaders game in rust with lazy loading
-=======
 # Invaders
 
 Invaders is an open source terminal arcade game with audio, based off of the "Space Invaders" classic arcade game.
@@ -62,4 +58,4 @@ All contributions are assumed to be dual-licensed under MIT/Apache-2.
 Distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 
 See [license/APACHE](license/APACHE) and [license/MIT](license/MIT).
->>>>>>> 08b7372 (Added Menu, Score, Levels)
+
