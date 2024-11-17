@@ -68,7 +68,7 @@ impl Drawable for Menu {
         ];
         let frame_width = frame[0].len();
         for (line_index, line) in title.iter().enumerate() {
-            let line_start_x = (frame_width.saturating_sub(line.len())); // Center each line
+            let line_start_x = frame_width.saturating_sub(line.len()); // Center each line
             for (i, c) in line.chars().enumerate() {
                 frame[line_start_x + i][title_start_y + line_index] = c;
             }
