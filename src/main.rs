@@ -46,15 +46,7 @@ fn reset_game(
     player.center(frame);
     *invaders = Invaders::new(difficulty); // Reapply difficulty to invaders
     invaders.populate(frame);
-    println!(
-        "\n\n\nGame reset: Difficulty = {:?}, Invader speed = {:?}, Player fire rate = {:?}",
-        difficulty,
-        difficulty.invader_speed,
-        difficulty.player_fire_rate
-    );
 }
-
-
 
 fn run_game(
     audio: &mut Audio,
@@ -102,13 +94,14 @@ fn run_game(
                         KeyCode::Right => menu.toggle_difficulty(false), // Toggle difficulty down
                         KeyCode::Char(' ') | KeyCode::Enter => {
                             if menu.selection == 0 {
-                                difficulty = Difficulty::new(match menu.get_selected_difficulty() {
-                                    "Easy" => DifficultyLevel::Easy,
-                                    "Normal" => DifficultyLevel::Normal,
-                                    "Hard" => DifficultyLevel::Hard,
-                                    "Hardcore" => DifficultyLevel::Hardcore,
-                                    _ => DifficultyLevel::Normal,
-                                });
+                                difficulty =
+                                    Difficulty::new(match menu.get_selected_difficulty() {
+                                        "Easy" => DifficultyLevel::Easy,
+                                        "Normal" => DifficultyLevel::Normal,
+                                        "Hard" => DifficultyLevel::Hard,
+                                        "Hardcore" => DifficultyLevel::Hardcore,
+                                        _ => DifficultyLevel::Normal,
+                                    });
                                 player = Player::new(&difficulty);
                                 player.center(&curr_frame);
                                 invaders = Invaders::new(&difficulty);
@@ -141,7 +134,13 @@ fn run_game(
                     }
                     KeyCode::Esc | KeyCode::Char('q') => {
                         audio.play("lose");
-                        reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame, &difficulty);
+                        reset_game(
+                            &mut in_menu,
+                            &mut player,
+                            &mut invaders,
+                            &curr_frame,
+                            &difficulty,
+                        );
                     }
                     _ => {}
                 }
@@ -176,12 +175,17 @@ fn run_game(
             invaders.next_level(&curr_frame); // Reset invaders
         } else if invaders.reached_bottom(&curr_frame) {
             audio.play("lose");
-            reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame, &difficulty);
+            reset_game(
+                &mut in_menu,
+                &mut player,
+                &mut invaders,
+                &curr_frame,
+                &difficulty,
+            );
         }
     }
     Ok(())
 }
-
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut audio = Audio::new();
