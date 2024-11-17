@@ -44,7 +44,7 @@ Were you inspired to make your own terminal-based game? Open a PR to add it to t
 
 ## Contribution
 
-All contributions are assumed to be dual-licensed under MIT/Apache-2.
+All contributions are assumed to be licensed under MIT.
 
 ## License
 
