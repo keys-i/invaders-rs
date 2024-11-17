@@ -22,4 +22,8 @@ Cargo.lock
 #.idea/
 =======
 /target
+<<<<<<< HEAD
 >>>>>>> 0388d69 (Initial Commit with Sounds)
+=======
+.DS_Store
+>>>>>>> 0073ff6 (Just Difficulty Setting not working rest, works)

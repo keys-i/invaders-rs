@@ -1,3 +1,4 @@
+pub mod difficulty;
 pub mod frame;
 pub mod invaders;
 pub mod level;

@@ -1,69 +1,70 @@
 use crate::{
+    difficulty::Difficulty,
     frame::{Drawable, Frame},
     invaders::Invaders,
     shot::Shot,
 };
+use rusty_time::Timer;
 use std::time::Duration;
 
 pub struct Player {
     x: usize,
     y: usize,
     shots: Vec<Shot>,
+    fire_rate_timer: Timer,
+    max_shots: usize,
 }
 
 impl Player {
-    // Initialize player position to zero; will be centered later based on frame size
-    pub fn new() -> Self {
+    pub fn new(difficulty: &Difficulty) -> Self {
         Self {
-            x: 0, // Will be centered dynamically based on frame size
-            y: 0, // Will be adjusted to bottom of the frame dynamically
+            x: 0, // Will be centered dynamically
+            y: 0, // Will be set based on frame size
             shots: Vec::new(),
+            fire_rate_timer: Timer::new(difficulty.player_fire_rate),
+            max_shots: difficulty.max_shots.unwrap_or(2),
         }
     }
 
-    // Center the player based on the current frame size
     pub fn center(&mut self, frame: &Frame) {
-        self.x = frame.len() / 2; // Center horizontally
-        self.y = frame[0].len() - 3; // Position near the bottom of the frame
+        self.x = frame.len() / 2;      // Center horizontally
+        self.y = frame[0].len() - 3;         // Position near the bottom
     }
 
-    // Move player left based on the current frame width
     pub fn move_left(&mut self, frame: &Frame) {
         if self.x <= 1 {
-            self.x = frame.len() - 2; // Wrap around to the right
+            self.x = frame.len() - 2; // Wrap around
         } else {
             self.x -= 1;
         }
     }
 
-    // Move player right based on the current frame width
     pub fn move_right(&mut self, frame: &Frame) {
         if self.x >= frame.len() - 2 {
-            self.x = 0; // Wrap around to the left
+            self.x = 0; // Wrap around
         } else {
             self.x += 1;
         }
     }
 
-    // Player shoots a shot (only 2 shots allowed at a time)
     pub fn shoot(&mut self) -> bool {
-        if self.shots.len() < 2 {
-            self.shots.push(Shot::new(self.x, self.y - 2)); // Shot appears above player
+        if self.shots.len() < self.max_shots && self.fire_rate_timer.finished() {
+            self.shots.push(Shot::new(self.x, self.y - 1));
+            self.fire_rate_timer.reset();
             true
         } else {
             false
         }
     }
 
-    // Update the player's shots
     pub fn update(&mut self, delta: Duration) {
+        self.fire_rate_timer.tick(delta);
         for shot in self.shots.iter_mut() {
             shot.update(delta);
         }
         self.shots.retain(|shot| !shot.dead());
     }
 
-    // Detect collisions with invaders and handle explosions
     pub fn detect_hits(&mut self, invaders: &mut Invaders) -> u16 {
         let mut hit_something = 0u16;
         for shot in self.shots.iter_mut() {
@@ -81,19 +82,17 @@ impl Player {
 
 impl Default for Player {
     fn default() -> Self {
-        Self::new()
+        Self::new(&Difficulty::default())
     }
 }
 
 impl Drawable for Player {
     fn draw(&self, frame: &mut Frame) {
-        // Ensure the player stays within the frame and doesn't overlap with the bottom border
-        if self.x < frame.len() && self.y < frame[0].len() - 2 {
+        if self.y < frame[0].len() && self.x < frame.len() {
             frame[self.x][self.y] = 'A'; // Draw the player
         }
-        // Draw all shots
         for shot in self.shots.iter() {
-            shot.draw(frame); // Draw the shots
+            shot.draw(frame);
         }
     }
 }

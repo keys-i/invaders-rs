@@ -21,14 +21,3 @@ pub fn new_frame() -> Frame {
 pub trait Drawable {
     fn draw(&self, frame: &mut Frame);
 }
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crossterm::terminal::size;
-
-    // Mocking a general terminal size
-    fn mock_size() -> (u16, u16) {
-        (80, 40)
-    }
-}

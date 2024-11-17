@@ -13,6 +13,7 @@ use std::{
 };
 
 use invaders::{
+    difficulty::{Difficulty, DifficultyLevel},
     frame::{self, new_frame, Drawable, Frame},
     invaders::Invaders,
     level::Level,
@@ -33,57 +34,88 @@ fn render_screen(render_rx: Receiver<Frame>, last_size: &mut (u16, u16)) {
     }
 }
 
-fn reset_game(in_menu: &mut bool, player: &mut Player, invaders: &mut Invaders, frame: &Frame) {
+fn reset_game(
+    in_menu: &mut bool,
+    player: &mut Player,
+    invaders: &mut Invaders,
+    frame: &Frame,
+    difficulty: &Difficulty,
+) {
     *in_menu = true;
-    *player = Player::new(); // Player is reset
-    player.center(frame); // Center player dynamically
-    invaders.populate(frame); // Populate invaders based on the current frame
+    *player = Player::new(difficulty); // Reapply difficulty to player
+    player.center(frame);
+    *invaders = Invaders::new(difficulty); // Reapply difficulty to invaders
+    invaders.populate(frame);
+    println!(
+        "\n\n\nGame reset: Difficulty = {:?}, Invader speed = {:?}, Player fire rate = {:?}",
+        difficulty,
+        difficulty.invader_speed,
+        difficulty.player_fire_rate
+    );
 }
+
+
 
 fn run_game(
     audio: &mut Audio,
     render_tx: &mpsc::Sender<Frame>,
     last_size: &mut (u16, u16),
 ) -> Result<(), Box<dyn Error>> {
-    // Game loop
     let mut instant = Instant::now();
-    let mut player = Player::new();
-    let mut invaders = Invaders::new(); // Use `new()` without frame size; use populate later
-    let mut score = Score::new();
     let mut menu = Menu::new();
+    let mut difficulty = Difficulty::new(DifficultyLevel::Normal); // Default difficulty
     let mut in_menu = true;
+
+    // Initialize game entities
+    let mut curr_frame = new_frame(); // Initial frame
+    let mut player = Player::new(&difficulty); // Player with difficulty settings
+    let mut invaders = Invaders::new(&difficulty); // Invaders with difficulty settings
+    let mut score = Score::new();
     let mut level = Level::new();
-    let mut curr_frame = new_frame(); // Initialize the frame
-    player.center(&curr_frame); // Center the player initially
-    invaders.populate(&curr_frame); // Populate invaders based on the frame
+
+    player.center(&curr_frame); // Center the player
+    invaders.populate(&curr_frame); // Populate invaders
 
     'gameloop: loop {
-        // Get terminal size and check if it has changed
+        // Adjust frame dimensions if terminal size changes
         let (new_term_width, new_term_height) = crossterm::terminal::size()?;
         if new_term_width != last_size.0 || new_term_height != last_size.1 {
-            // Adjust frame dimensions if the terminal was resized
             curr_frame = new_frame();
-            player.center(&curr_frame); // Center player dynamically after resize
-            invaders.populate(&curr_frame); // Re-populate invaders dynamically based on the new frame
+            player.center(&curr_frame);
+            invaders.populate(&curr_frame);
+            *last_size = (new_term_width, new_term_height); // Update last known size
         }
 
-        // Per-frame init
+        // Per-frame initialization
         let delta = instant.elapsed();
         instant = Instant::now();
         let mut curr_frame = new_frame();
 
         if in_menu {
-            // Input handlers for the menu
+            // Menu logic
             while event::poll(Duration::default())? {
                 if let Event::Key(key_event) = event::read()? {
                     match key_event.code {
                         KeyCode::Up => menu.change_option(true),
                         KeyCode::Down => menu.change_option(false),
+                        KeyCode::Left => menu.toggle_difficulty(true), // Toggle difficulty up
+                        KeyCode::Right => menu.toggle_difficulty(false), // Toggle difficulty down
                         KeyCode::Char(' ') | KeyCode::Enter => {
                             if menu.selection == 0 {
-                                in_menu = false;
+                                difficulty = Difficulty::new(match menu.get_selected_difficulty() {
+                                    "Easy" => DifficultyLevel::Easy,
+                                    "Normal" => DifficultyLevel::Normal,
+                                    "Hard" => DifficultyLevel::Hard,
+                                    "Hardcore" => DifficultyLevel::Hardcore,
+                                    _ => DifficultyLevel::Normal,
+                                });
+                                player = Player::new(&difficulty);
+                                player.center(&curr_frame);
+                                invaders = Invaders::new(&difficulty);
+                                invaders.populate(&curr_frame);
+                                in_menu = false; // Exit menu and start the game
                             } else {
-                                break 'gameloop;
+                                break 'gameloop; // Exit game
                             }
                         }
                         _ => {}
@@ -91,27 +123,25 @@ fn run_game(
                 }
             }
             menu.draw(&mut curr_frame);
-
             let _ = render_tx.send(curr_frame);
             thread::sleep(Duration::from_millis(1));
             continue;
         }
 
-        // Input handlers for the game
+        // Game input handling
         while event::poll(Duration::default())? {
             if let Event::Key(key_event) = event::read()? {
                 match key_event.code {
-                    KeyCode::Left => player.move_left(&curr_frame), // Adjust player position dynamically
-                    KeyCode::Right => player.move_right(&curr_frame), // Adjust player position dynamically
+                    KeyCode::Left => player.move_left(&curr_frame),
+                    KeyCode::Right => player.move_right(&curr_frame),
                     KeyCode::Char(' ') | KeyCode::Enter => {
                         if player.shoot() {
                             audio.play("pew");
-                            invaders.record_shot();
                         }
                     }
                     KeyCode::Esc | KeyCode::Char('q') => {
                         audio.play("lose");
-                        reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame);
+                        reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame, &difficulty);
                     }
                     _ => {}
                 }
@@ -123,13 +153,13 @@ fn run_game(
         if invaders.update(delta, &curr_frame) {
             audio.play("move");
         }
-        let hits: u16 = player.detect_hits(&mut invaders);
+        let hits = player.detect_hits(&mut invaders);
         if hits > 0 {
             audio.play("explode");
             score.add_points(hits);
         }
 
-        // Draw & render
+        // Draw and render
         let drawables: Vec<&dyn Drawable> = vec![&player, &invaders, &score, &level];
         for drawable in drawables {
             drawable.draw(&mut curr_frame);
@@ -137,20 +167,21 @@ fn run_game(
         let _ = render_tx.send(curr_frame.clone());
         thread::sleep(Duration::from_millis(1));
 
-        // Win or lose?
+        // Win or lose conditions
         if invaders.all_killed() {
             if level.increment_level() {
                 audio.play("win");
                 break 'gameloop;
             }
-            invaders.next_level(&curr_frame); // Re-populate invaders after winning
+            invaders.next_level(&curr_frame); // Reset invaders
         } else if invaders.reached_bottom(&curr_frame) {
             audio.play("lose");
-            reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame);
+            reset_game(&mut in_menu, &mut player, &mut invaders, &curr_frame, &difficulty);
         }
     }
     Ok(())
 }
+
 
 fn main() -> Result<(), Box<dyn Error>> {
     let mut audio = Audio::new();

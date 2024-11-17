@@ -1,4 +1,4 @@
-use crate::frame::{Drawable, Frame};
+use crate::{difficulty::Difficulty, frame::{Drawable, Frame}};
 use rusty_time::Timer;
 use std::{cmp::max, time::Duration};
 
@@ -22,11 +22,11 @@ pub struct Invaders {
 
 impl Invaders {
     // Initialize invaders based on the frame size (no need to store frame dimensions)
-    pub fn new() -> Self {
+    pub fn new(difficulty: &Difficulty) -> Self {
         Self {
             army: Vec::new(),
             total_count: 0,
-            move_timer: Timer::new(Duration::from_millis(2000)),
+            move_timer: Timer::new(difficulty.invader_speed),
             pop_timer: Timer::new(Duration::from_millis(200)), // Pop interval
             direction: 1,
             level: 1, // Start at level 1
@@ -55,8 +55,8 @@ impl Invaders {
 
     // Populate invaders dynamically based on the current level and frame size
     pub fn populate(&mut self, frame: &Frame) {
-        let frame_width = frame[0].len();
-        let frame_height = frame.len();
+        let frame_width = frame.len();
+        let frame_height = frame[0].len();
 
         let num_invaders = Invaders::series(self.level) as usize; // Use the Fibonacci number directly
 
@@ -208,7 +208,7 @@ impl Invaders {
 
 impl Default for Invaders {
     fn default() -> Self {
-        Self::new()
+        Self::new(&Difficulty::default())
     }
 }
 

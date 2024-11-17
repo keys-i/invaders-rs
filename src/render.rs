@@ -37,56 +37,33 @@ pub fn render(
 
     // Draw top border
     stdout.queue(MoveTo(x_offset, y_offset)).unwrap();
-    print!("{}", "─".repeat((frame_width + 2) as usize));
+    print!("┏{}┓", "━".repeat(frame_width as usize));
 
     // Draw bottom border
     stdout
         .queue(MoveTo(x_offset, y_offset + frame_height + 1))
         .unwrap();
-    print!("{}", "─".repeat((frame_width + 2) as usize));
+    print!("┗{}┛", "━".repeat(frame_width as usize));
 
     // Draw left and right borders
     for y in 0..frame_height {
         // Left border
         stdout.queue(MoveTo(x_offset, y_offset + y + 1)).unwrap(); // Shifted down by 1 for the border
-        print!("│");
+        print!("┃");
         // Right border
         stdout
             .queue(MoveTo(x_offset + frame_width + 1, y_offset + y + 1))
             .unwrap(); // Shifted down by 1 for the border
-        print!("│");
+        print!("┃");
     }
-
-    // Draw the corners
-    stdout.queue(MoveTo(x_offset, y_offset)).unwrap();
-    print!("┏");
-    stdout
-        .queue(MoveTo(x_offset + frame_width + 1, y_offset))
-        .unwrap();
-    print!("┓");
-    stdout
-        .queue(MoveTo(x_offset, y_offset + frame_height + 1))
-        .unwrap();
-    print!("└");
-    stdout
-        .queue(MoveTo(
-            x_offset + frame_width + 1,
-            y_offset + frame_height + 1,
-        ))
-        .unwrap();
-    print!("┘");
 
     // Reset color back to default for game content (white text, black background)
     stdout.queue(SetBackgroundColor(Color::Black)).unwrap();
     stdout.queue(SetForegroundColor(Color::White)).unwrap();
 
-    // Ensure the frame sizes match to avoid out-of-bounds access
-    let min_width = curr_frame.len().min(last_frame.len());
-    let min_height = curr_frame[0].len().min(last_frame[0].len());
-
     // Ensure we're not rendering outside the terminal bounds
-    let renderable_width = (term_width.saturating_sub(2)).min(min_width as u16);
-    let renderable_height = (term_height.saturating_sub(2)).min(min_height as u16);
+    let renderable_width = frame_width.min(term_width.saturating_sub(2));
+    let renderable_height = frame_height.min(term_height.saturating_sub(2));
 
     // Iterate over each cell and render the game frame with offset
     for x in 0..renderable_width as usize {

@@ -1,8 +1,10 @@
-use crate::frame::{Drawable, Frame};
 
+use crate::frame::{Drawable, Frame};
 pub struct Menu {
     pub options: Vec<String>,
     pub selection: usize,
+    pub difficulty_levels: Vec<String>,
+    pub current_difficulty: usize,
 }
 
 impl Menu {
@@ -10,6 +12,13 @@ impl Menu {
         Self {
             options: vec![String::from("New game"), String::from("Exit")],
             selection: 0,
+            difficulty_levels: vec![
+                String::from("Easy"),
+                String::from("Normal"),
+                String::from("Hard"),
+                String::from("Hardcore"),
+            ],
+            current_difficulty: 1, // Default to "Normal"
         }
     }
 
@@ -20,7 +29,20 @@ impl Menu {
             self.selection += 1;
         }
     }
+
+    pub fn toggle_difficulty(&mut self, upwards: bool) {
+        if upwards && self.current_difficulty > 0 {
+            self.current_difficulty -= 1;
+        } else if !upwards && self.current_difficulty < self.difficulty_levels.len() - 1 {
+            self.current_difficulty += 1;
+        }
+    }
+
+    pub fn get_selected_difficulty(&self) -> &str {
+        &self.difficulty_levels[self.current_difficulty]
+    }
 }
+
 
 impl Default for Menu {
     fn default() -> Self {
@@ -31,11 +53,29 @@ impl Default for Menu {
 // Reuse Frame grid to print the menu options
 impl Drawable for Menu {
     fn draw(&self, frame: &mut Frame) {
-        frame[0][self.selection] = '>';
+        let menu_start_y = 5;
+        let difficulty_start_y = 2;
+
+        // Render difficulty
+        let difficulty_label = "Difficulty:";
+        for (i, c) in difficulty_label.chars().enumerate() {
+            frame[i][difficulty_start_y] = c;
+        }
+        let difficulty_level = self.get_selected_difficulty();
+        for (i, c) in difficulty_level.chars().enumerate() {
+            frame[difficulty_label.len() + 1 + i][difficulty_start_y] = c;
+        }
+
+        // Render menu options
         for (index, option) in self.options.iter().enumerate() {
-            for i in 0..option.len() {
-                frame[i + 1][index] = self.options[index].chars().nth(i).unwrap();
+            if index == self.selection {
+                frame[0][menu_start_y + index] = '>';
+            }
+            for (i, c) in option.chars().enumerate() {
+                frame[i + 1][menu_start_y + index] = c;
             }
         }
     }
 }
+
+
